@@ -47,26 +47,26 @@ class Main:
         args = parser.parse_args()
         self.model_name = args.model_name
         if not self.model_name:
-            self.model_name = FLAGS.ckpt_dir
+            self.model_name = config.ckpt_dir
         if not os.path.isdir(self.model_name):   # 创建存储临时字典数据的目录
             os.makedirs(self.model_name)
 
     def load_data(self):
         logger.info("start load data")
-        self.train_data_df = load_data_from_csv(FLAGS.train_data_path)
-        self.validate_data_df = load_data_from_csv(FLAGS.dev_data_path)
+        self.train_data_df = load_data_from_csv(config.train_data_path)
+        self.validate_data_df = load_data_from_csv(config.dev_data_path)
         content_train = self.train_data_df.iloc[:, 1]
         content_valid = self.validate_data_df.iloc[:, 1]
         logger.info("start seg train data")
-        if not os.path.isdir(FLAGS.pkl_dir):   # 创建存储临时字典数据的目录
-            os.makedirs(FLAGS.pkl_dir)
-        string_train_valid = os.path.join(FLAGS.pkl_dir, "string_train_valid.pkl")
+        if not os.path.isdir(config.pkl_dir):   # 创建存储临时字典数据的目录
+            os.makedirs(config.pkl_dir)
+        string_train_valid = os.path.join(config.pkl_dir, "string_train_valid.pkl")
         if os.path.exists(string_train_valid):  # 若word_label_path已存在
             with open(string_train_valid, 'rb') as f:
                 self.string_train, self.string_valid = pickle.load(f)
         else:
-            self.string_train = seg_words(content_train, FLAGS.tokenize_style)  # 根据tokenize_style对评论字符串进行分词
-            self.string_valid = seg_words(content_valid, FLAGS.tokenize_style)
+            self.string_train = seg_words(content_train, config.tokenize_style)  # 根据tokenize_style对评论字符串进行分词
+            self.string_valid = seg_words(content_valid, config.tokenize_style)
             with open(string_train_valid, 'wb') as f:
                 pickle.dump([self.string_train, self.string_valid], f)
         print("训练集大小：", len(self.string_train))
@@ -86,29 +86,29 @@ class Main:
 
     def get_dict(self):
         logger.info("start get dict")
-        if not os.path.isdir(FLAGS.pkl_dir):   # 创建存储临时字典数据的目录
-            os.makedirs(FLAGS.pkl_dir)
-        word_label_dict = os.path.join(FLAGS.pkl_dir, "word_label_dict.pkl")    # 存储word和label与index之间的双向映射字典
+        if not os.path.isdir(config.pkl_dir):   # 创建存储临时字典数据的目录
+            os.makedirs(config.pkl_dir)
+        word_label_dict = os.path.join(config.pkl_dir, "word_label_dict.pkl")    # 存储word和label与index之间的双向映射字典
         if os.path.exists(word_label_dict):  # 若word_label_path已存在
             with open(word_label_dict, 'rb') as dict_f:
                 self.word_to_index, self.index_to_word, self.label_to_index, self.index_to_label = pickle.load(dict_f)
         else:   # 重新读取训练数据并创建各个映射字典
             self.word_to_index, self.index_to_word, self.label_to_index, self.index_to_label = \
-                create_dict(self.string_train, self.label_train_dict, word_label_dict, FLAGS.vocab_size)
+                create_dict(self.string_train, self.label_train_dict, word_label_dict, config.vocab_size)
         # print(len(self.word_to_index), self.word_to_index)
         logger.info("complete get dict")
 
     def get_data(self):
         logger.info("start get data")
-        train_valid_test = os.path.join(FLAGS.pkl_dir, "train_valid_test_4.pkl")
+        train_valid_test = os.path.join(config.pkl_dir, "train_valid_test_4.pkl")
         if os.path.exists(train_valid_test):    # 若train_valid_test已被处理和存储
             with open(train_valid_test, 'rb') as data_f:
                 train_data, valid_data, self.label_weight_dict = pickle.load(data_f)
         else:   # 读取数据集并创建训练集、验证集
             # 获取tfidf值并存储为tfidf字典
-            if not os.path.exists(FLAGS.tfidf_dict_path):
-                get_tfidf_dict_and_save(self.string_train, FLAGS.tfidf_dict_path, config.tokenize_style)
-            tfidf_dict = load_tfidf_dict(FLAGS.tfidf_dict_path)
+            if not os.path.exists(config.tfidf_dict_path):
+                get_tfidf_dict_and_save(self.string_train, config.tfidf_dict_path, config.tokenize_style)
+            tfidf_dict = load_tfidf_dict(config.tfidf_dict_path)
             # 根据tfidf_dict获取训练集和验证集的tfidf值向量作为额外的特征向量
             train_vector_tfidf = get_vector_tfidf_from_dict(self.string_train, tfidf_dict)
             valid_vector_tfidf = get_vector_tfidf_from_dict(self.string_valid, tfidf_dict)
@@ -136,17 +136,17 @@ class Main:
             # print(self.label_train_dict["location_traffic_convenience"])
             # 打乱数据、padding,并对评论序列、特征向量、标签字典打包
             # max_sentence = get_max_len(sentences_train)  # 获取最大评论序列长度
-            train_data = shuffle_padding(sentences_train, train_vector_tfidf, self.label_train_dict, FLAGS.max_len)
-            valid_data = shuffle_padding(sentences_valid, valid_vector_tfidf, self.label_valid_dict, FLAGS.max_len)
+            train_data = shuffle_padding(sentences_train, train_vector_tfidf, self.label_train_dict, config.max_len)
+            valid_data = shuffle_padding(sentences_valid, valid_vector_tfidf, self.label_valid_dict, config.max_len)
             # 从训练集中获取label_weight_dict（存储标签权重）
             self.label_weight_dict = get_labal_weight(train_data[2], self.columns, config.num_classes)
             with open(train_valid_test, "wb") as f:
                 pickle.dump([train_data, valid_data, self.label_weight_dict], f)
         print("训练集大小：", len(train_data[0]), "验证集大小：", len(valid_data[0]))
         # 获取train、valid数据的batch生成类
-        self.train_batch_manager = BatchManager(train_data, int(FLAGS.batch_size))
+        self.train_batch_manager = BatchManager(train_data, int(config.batch_size))
         print("训练集批次数量：", self.train_batch_manager.len_data)
-        self.valid_batch_manager = BatchManager(valid_data, int(FLAGS.batch_size))
+        self.valid_batch_manager = BatchManager(valid_data, int(config.batch_size))
         logger.info("complete get data")
 
     def train_control(self):
@@ -173,7 +173,7 @@ class Main:
         best_acc = 0.50
         best_f1_score = 0.20
         batch_num = self.train_batch_manager.len_data
-        for epoch in range(curr_epoch, FLAGS.num_epochs):
+        for epoch in range(curr_epoch, config.num_epochs):
             loss, eval_acc, counter = 0.0, 0.0, 0
             input_y_all = []
             predictions_all = []
@@ -186,7 +186,7 @@ class Main:
                 index = iteration % batch_num - 1 if iteration % batch_num != 0 else batch_num - 1
                 weights = get_weights_for_current_batch(input_y, self.label_weight_dict[column_name])   # 根据类别权重参数更新训练集各标签的权重
                 feed_dict = {text_cnn.input_x: input_x, text_cnn.features_vector: features_vector, text_cnn.input_y: input_y,
-                             text_cnn.weights: weights, text_cnn.dropout_keep_prob: FLAGS.dropout_keep_prob,
+                             text_cnn.weights: weights, text_cnn.dropout_keep_prob: config.dropout_keep_prob,
                              text_cnn.iter: iteration}
                 curr_loss, curr_acc, lr, _, predictions = sess.run([text_cnn.loss_val, text_cnn.accuracy, text_cnn.learning_rate, text_cnn.train_op, text_cnn.predictions],
                                                                    feed_dict)
@@ -201,19 +201,19 @@ class Main:
             print("going to increment epoch counter....")
             sess.run(text_cnn.epoch_increment)
             # valid
-            if epoch % FLAGS.validate_every == 0:
+            if epoch % config.validate_every == 0:
                 eval_loss, eval_accc, f1_scoree, f_0, f_1, f_2, f_3, weights_label = self.evaluate(sess, text_cnn, self.valid_batch_manager, iteration, column_name)
                 print("【Validation】Epoch %d\t f_0:%.3f\tf_1:%.3f\tf_2:%.3f\tf_3:%.3f" % (epoch, f_0, f_1, f_2, f_3))
                 print("【Validation】Epoch %d\t Loss:%.3f\tAcc %.3f\tF1 Score:%.3f" % (epoch, eval_loss, eval_accc, f1_scoree))
                 # save model to checkpoint
                 if f1_scoree > best_f1_score:
-                    save_path = FLAGS.ckpt_dir + "/" + column_name + "/model.ckpt"
+                    save_path = config.ckpt_dir + "/" + column_name + "/model.ckpt"
                     print("going to save model. eval_f1_score:", f1_scoree, ";previous best f1 score:", best_f1_score,
                           ";eval_acc", str(eval_accc), ";previous best_acc:", str(best_acc))
                     saver.save(sess, save_path)
                     best_acc = eval_accc
                     best_f1_score = f1_scoree
-                if FLAGS.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
+                if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
                     for i in range(1):  # decay learning rate if necessary.
                         print(i, "Going to decay learning rate by half.")
                         sess.run(text_cnn.learning_rate_decay_half_op)
@@ -221,7 +221,7 @@ class Main:
     def create_model(self, sess, column_name):
         text_cnn = TextCNN()
         saver = tf.train.Saver()
-        model_save_dir = FLAGS.ckpt_dir + "/" + column_name
+        model_save_dir = config.ckpt_dir + "/" + column_name
         if os.path.exists(model_save_dir):
             print("Restoring Variables from Checkpoint.")
             saver.restore(sess, tf.train.latest_checkpoint(model_save_dir))
@@ -234,10 +234,10 @@ class Main:
             sess.run(tf.global_variables_initializer())
             if not os.path.exists(model_save_dir):
                 os.makedirs(model_save_dir)
-            if FLAGS.use_pretrained_embedding:  # 加载预训练的词向量
+            if config.use_pretrained_embedding:  # 加载预训练的词向量
                 print("===>>>going to use pretrained word embeddings...")
                 old_emb_matrix_word2vec = sess.run(text_cnn.Embedding_word2vec.read_value())
-                new_emb_matrix_word2vec = load_word_embedding(old_emb_matrix_word2vec, FLAGS.word2vec_model_path, FLAGS.embed_size, self.index_to_word)
+                new_emb_matrix_word2vec = load_word_embedding(old_emb_matrix_word2vec, config.word2vec_model_path, config.embed_size, self.index_to_word)
                 word_embedding_word2vec = tf.constant(new_emb_matrix_word2vec, dtype=tf.float32)  # 转为tensor
                 t_assign_embedding = tf.assign(text_cnn.Embedding_word2vec, word_embedding_word2vec)  # 将word_embedding复制给text_cnn.Embedding
                 sess.run(t_assign_embedding)
