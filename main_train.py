@@ -234,7 +234,7 @@ class Main:
     def create_model(self, column_name):
         model_save_dir = config.ckpt_dir + "/" + column_name
         if os.path.exists(model_save_dir):
-            model = torch.load(model_save_dir)
+            model = torch.load(model_save_dir+"/model.ckpt")
             print("Restoring Variables from Checkpoint.")
         else:
             print('Initializing Variables')
