@@ -75,7 +75,7 @@ class _DenseBlock(nn.Module):
         for name, layer in self.named_children():
             new_features = layer(*features)
             new_features = new_features.detach().cpu().numpy()
-            new_features = new_features[:, :, :config.max_len, :]
+            new_features = new_features[:, :, :config.max_len, :]   # 由于特征图的下面多了一行padding值，所以通过切片取前面max_len行特征
             new_features = torch.Tensor(new_features)
             features.append(new_features.cuda())
         return torch.cat(features, 1)   # 将所有生成的特征图拼接在一起，用于最后的全连接

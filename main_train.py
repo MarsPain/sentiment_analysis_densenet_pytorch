@@ -66,6 +66,7 @@ class Main:
         if not os.path.isdir(config.pkl_dir):   # 创建存储临时字典数据的目录
             os.makedirs(config.pkl_dir)
         string_train_valid = os.path.join(config.pkl_dir, "string_train_valid.pkl")
+        # string_train_valid = os.path.join(config.pkl_dir, "string_train_valid_2.pkl")
         if os.path.exists(string_train_valid):  # 若word_label_path已存在
             with open(string_train_valid, 'rb') as f:
                 self.string_train, self.string_valid = pickle.load(f)
@@ -106,6 +107,7 @@ class Main:
     def get_data(self):
         logger.info("start get data")
         train_valid_test = os.path.join(config.pkl_dir, "train_valid_test.pkl")
+        # train_valid_test = os.path.join(config.pkl_dir, "train_valid_test_2.pkl")
         if os.path.exists(train_valid_test):    # 若train_valid_test已被处理和存储
             with open(train_valid_test, 'rb') as data_f:
                 train_data, valid_data, self.label_weight_dict = pickle.load(data_f)
