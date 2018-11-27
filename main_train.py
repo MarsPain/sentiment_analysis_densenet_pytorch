@@ -16,6 +16,11 @@ from data_utils import seg_words, create_dict, shuffle_padding, sentence_word_to
     get_vector_tfidf_from_dict
 from utils import load_data_from_csv, get_tfidf_and_save, load_tfidf_dict,\
     load_word_embedding, get_tfidf_dict_and_save, get_idf_dict_and_save
+from model import DenseNet
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.autograd import Variable
 
 
 filter_sizes = config.filter_sizes
@@ -55,12 +60,12 @@ class Main:
         logger.info("start load data")
         self.train_data_df = load_data_from_csv(config.train_data_path)
         self.validate_data_df = load_data_from_csv(config.dev_data_path)
-        content_train = self.train_data_df.iloc[:, 1]
-        content_valid = self.validate_data_df.iloc[:, 1]
+        content_train = self.train_data_df.iloc[:10000, 1]
+        content_valid = self.validate_data_df.iloc[:1000, 1]
         logger.info("start seg train data")
         if not os.path.isdir(config.pkl_dir):   # 创建存储临时字典数据的目录
             os.makedirs(config.pkl_dir)
-        string_train_valid = os.path.join(config.pkl_dir, "string_train_valid.pkl")
+        string_train_valid = os.path.join(config.pkl_dir, "string_train_valid_2.pkl")
         if os.path.exists(string_train_valid):  # 若word_label_path已存在
             with open(string_train_valid, 'rb') as f:
                 self.string_train, self.string_valid = pickle.load(f)
@@ -76,11 +81,11 @@ class Main:
         logger.info("load label data")
         self.label_train_dict = {}
         for column in self.columns[2:]:
-            label_train = list(self.train_data_df[column].iloc[:])
+            label_train = list(self.train_data_df[column].iloc[:10000])
             self.label_train_dict[column] = label_train
         self.label_valid_dict = {}
         for column in self.columns[2:]:
-            label_valid = list(self.validate_data_df[column].iloc[:])
+            label_valid = list(self.validate_data_df[column].iloc[:1000])
             self.label_valid_dict[column] = label_valid
         # print(self.label_list["location_traffic_convenience"][0], type(self.label_list["location_traffic_convenience"][0]))
 
@@ -100,7 +105,7 @@ class Main:
 
     def get_data(self):
         logger.info("start get data")
-        train_valid_test = os.path.join(config.pkl_dir, "train_valid_test_4.pkl")
+        train_valid_test = os.path.join(config.pkl_dir, "train_valid_test_2.pkl")
         if os.path.exists(train_valid_test):    # 若train_valid_test已被处理和存储
             with open(train_valid_test, 'rb') as data_f:
                 train_data, valid_data, self.label_weight_dict = pickle.load(data_f)
@@ -159,21 +164,24 @@ class Main:
         column_name_list = self.columns
         column_name = column_name_list[config.column_index]   # 选择评价对象
         logger.info("start %s model train" % column_name)
-        tf_config = tf.ConfigProto()
-        tf_config.gpu_options.allow_growth = True
-        with tf.Session(config=tf_config) as sess:
-            self.train(sess, column_name)
+        # tf_config = tf.ConfigProto()
+        # tf_config.gpu_options.allow_growth = True
+        # with tf.Session(config=tf_config) as sess:
+        self.train(column_name)
         logger.info("complete %s model train" % column_name)
         logger.info("complete all models' train")
 
-    def train(self, sess, column_name):
-        text_cnn, saver = self.create_model(sess, column_name)
-        curr_epoch = sess.run(text_cnn.epoch_step)
+    def train(self, column_name):
+        model = self.create_model(column_name)
+        print("model:", model)
+        # curr_epoch = sess.run(text_cnn.epoch_step)
+
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
         iteration = 0
         best_acc = 0.50
         best_f1_score = 0.20
         batch_num = self.train_batch_manager.len_data
-        for epoch in range(curr_epoch, config.num_epochs):
+        for epoch in range(config.num_epochs):
             loss, eval_acc, counter = 0.0, 0.0, 0
             input_y_all = []
             predictions_all = []
@@ -183,72 +191,78 @@ class Main:
                 input_x, features_vector, input_y_dict = batch
                 input_y = input_y_dict[column_name]
                 input_y_all.extend(input_y)
-                index = iteration % batch_num - 1 if iteration % batch_num != 0 else batch_num - 1
-                weights = get_weights_for_current_batch(input_y, self.label_weight_dict[column_name])   # 根据类别权重参数更新训练集各标签的权重
-                feed_dict = {text_cnn.input_x: input_x, text_cnn.features_vector: features_vector, text_cnn.input_y: input_y,
-                             text_cnn.weights: weights, text_cnn.dropout_keep_prob: config.dropout_keep_prob,
-                             text_cnn.iter: iteration}
-                curr_loss, curr_acc, lr, _, predictions = sess.run([text_cnn.loss_val, text_cnn.accuracy, text_cnn.learning_rate, text_cnn.train_op, text_cnn.predictions],
-                                                                   feed_dict)
+                # weights = get_weights_for_current_batch(input_y, self.label_weight_dict[column_name])   # 根据类别权重参数更新训练集各标签的权重
+                weights = [1.24, 25, 19.91, 0.32]
+                weights = np.asarray(weights)
+                weights = torch.Tensor(weights)
+                # print("weights:", weights.size())
+                criterion = nn.CrossEntropyLoss(weight=weights)
+                input_x = torch.Tensor(input_x)
+                input_y = torch.Tensor(input_y)
+                input_y_onehot = np.zeros((config.batch_size, config.num_classes))
+                # print("input_y_onehot:", input_y_onehot.shape)
+                for index, y_value in enumerate(input_y):
+                    input_y_onehot[index][int(y_value)] = 1.0
+                input_y = input_y.long()
+                input_y_onehot = torch.Tensor(input_y_onehot)
+                input_y_onehot = input_y_onehot.long()
+                input_x, input_y_onehot = Variable(input_x), Variable(input_y)
+                outputs = model(input_x)
+                # print("outputs", outputs.size())
+                # print("input_y_onehot:", input_y_onehot, input_y_onehot.size())
+                curr_loss = criterion(outputs, input_y_onehot)
+                _, predictions = torch.max(outputs.data, 1)
+                # print("predictions:", predictions)
+                curr_acc = ((predictions == input_y).sum()) / len(input_y)
                 predictions_all.extend(predictions)
                 loss, eval_acc, counter = loss+curr_loss, eval_acc+curr_acc, counter+1
-                if counter % 100 == 0:  # steps_check
-                    print("Epoch %d\tBatch %d\tTrain Loss:%.3f\tAcc:%.3f\tLearning rate:%.5f" % (epoch, counter, loss/float(counter), eval_acc/float(counter), lr))
+                if counter % 10 == 0:  # steps_check
+                    print("Epoch %d\tBatch %d\tTrain Loss:%.3f\tAcc:%.3f" % (epoch, counter, loss/float(counter), eval_acc/float(counter)))
+                curr_loss.backward()
+                optimizer.step()
             # sample_weights_list = sample_weights_list_new
             f_0, f_1, f_2, f_3 = get_f_scores_all(predictions_all, input_y_all, 0.00001)  # test_f_score_in_valid_data
             print("f_0, f_1, f_2, f_3:", f_0, f_1, f_2, f_3)
             print("f1_score:", (f_0 + f_1 + f_2 + f_3) / 4)
             print("going to increment epoch counter....")
-            sess.run(text_cnn.epoch_increment)
+            # sess.run(text_cnn.epoch_increment)
             # valid
-            if epoch % config.validate_every == 0:
-                eval_loss, eval_accc, f1_scoree, f_0, f_1, f_2, f_3, weights_label = self.evaluate(sess, text_cnn, self.valid_batch_manager, iteration, column_name)
-                print("【Validation】Epoch %d\t f_0:%.3f\tf_1:%.3f\tf_2:%.3f\tf_3:%.3f" % (epoch, f_0, f_1, f_2, f_3))
-                print("【Validation】Epoch %d\t Loss:%.3f\tAcc %.3f\tF1 Score:%.3f" % (epoch, eval_loss, eval_accc, f1_scoree))
-                # save model to checkpoint
-                if f1_scoree > best_f1_score:
-                    save_path = config.ckpt_dir + "/" + column_name + "/model.ckpt"
-                    print("going to save model. eval_f1_score:", f1_scoree, ";previous best f1 score:", best_f1_score,
-                          ";eval_acc", str(eval_accc), ";previous best_acc:", str(best_acc))
-                    saver.save(sess, save_path)
-                    best_acc = eval_accc
-                    best_f1_score = f1_scoree
-                if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
-                    for i in range(1):  # decay learning rate if necessary.
-                        print(i, "Going to decay learning rate by half.")
-                        sess.run(text_cnn.learning_rate_decay_half_op)
+            # if epoch % config.validate_every == 0:
+            #     eval_loss, eval_accc, f1_scoree, f_0, f_1, f_2, f_3, weights_label = self.evaluate(sess, text_cnn, self.valid_batch_manager, iteration, column_name)
+            #     print("【Validation】Epoch %d\t f_0:%.3f\tf_1:%.3f\tf_2:%.3f\tf_3:%.3f" % (epoch, f_0, f_1, f_2, f_3))
+            #     print("【Validation】Epoch %d\t Loss:%.3f\tAcc %.3f\tF1 Score:%.3f" % (epoch, eval_loss, eval_accc, f1_scoree))
+            #     # save model to checkpoint
+            #     if f1_scoree > best_f1_score:
+            #         save_path = config.ckpt_dir + "/" + column_name + "/model.ckpt"
+            #         print("going to save model. eval_f1_score:", f1_scoree, ";previous best f1 score:", best_f1_score,
+            #               ";eval_acc", str(eval_accc), ";previous best_acc:", str(best_acc))
+            #         saver.save(sess, save_path)
+            #         best_acc = eval_accc
+            #         best_f1_score = f1_scoree
+            #     if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
+            #         for i in range(1):  # decay learning rate if necessary.
+            #             print(i, "Going to decay learning rate by half.")
+            #             sess.run(text_cnn.learning_rate_decay_half_op)
 
-    def create_model(self, sess, column_name):
-        text_cnn = TextCNN()
-        saver = tf.train.Saver()
+    def create_model(self, column_name):
         model_save_dir = config.ckpt_dir + "/" + column_name
         if os.path.exists(model_save_dir):
+            model = torch.load(model_save_dir)
             print("Restoring Variables from Checkpoint.")
-            saver.restore(sess, tf.train.latest_checkpoint(model_save_dir))
-            if False:
-                for i in range(1):  # decay learning rate if necessary.
-                    print(i, "Going to decay learning rate by half.")
-                    sess.run(text_cnn.learning_rate_decay_half_op)
         else:
             print('Initializing Variables')
-            sess.run(tf.global_variables_initializer())
-            if not os.path.exists(model_save_dir):
-                os.makedirs(model_save_dir)
+            model = DenseNet()
+            optimizer = optim.Adam(model.parameters(), lr=0.001)
+            optimizer.zero_grad()
+            # if not os.path.exists(model_save_dir):
+            #     os.makedirs(model_save_dir)
             if config.use_pretrained_embedding:  # 加载预训练的词向量
                 print("===>>>going to use pretrained word embeddings...")
-                old_emb_matrix_word2vec = sess.run(text_cnn.Embedding_word2vec.read_value())
-                new_emb_matrix_word2vec = load_word_embedding(old_emb_matrix_word2vec, config.word2vec_model_path, config.embed_size, self.index_to_word)
-                word_embedding_word2vec = tf.constant(new_emb_matrix_word2vec, dtype=tf.float32)  # 转为tensor
-                t_assign_embedding = tf.assign(text_cnn.Embedding_word2vec, word_embedding_word2vec)  # 将word_embedding复制给text_cnn.Embedding
-                sess.run(t_assign_embedding)
-                # old_emb_matrix_fasttext = sess.run(text_cnn.Embedding_fasttext.read_value())
-                # fasttext_model_path = os.path.join(FLAGS.fasttext_word_vector_dir, column_name + "_fasttext.txt")
-                # new_emb_matrix_fasttext = load_word_embedding(old_emb_matrix_fasttext, fasttext_model_path, FLAGS.embed_size, self.index_to_word)
-                # word_embedding_fasttext = tf.constant(new_emb_matrix_fasttext, dtype=tf.float32)  # 转为tensor
-                # t_assign_embedding = tf.assign(text_cnn.Embedding_fasttext, word_embedding_fasttext)  # 将word_embedding复制给text_cnn.Embedding
-                # sess.run(t_assign_embedding)
+                emb_matrix = np.zeros((len(self.index_to_word), config.embed_size))
+                new_emb_matrix_word2vec = load_word_embedding(emb_matrix, config.word2vec_model_path, config.embed_size, self.index_to_word)
+                model.embed.weight.data.copy_(torch.from_numpy(new_emb_matrix_word2vec))
                 print("using pre-trained word emebedding.ended...")
-        return text_cnn, saver
+        return model
 
     def evaluate(self, sess, text_cnn, batch_manager, iteration, column_name):
         small_value = 0.00001
