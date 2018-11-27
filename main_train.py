@@ -173,9 +173,8 @@ class Main:
 
     def train(self, column_name):
         model = self.create_model(column_name)
-        print("model:", model)
+        # print("model:", model)
         # curr_epoch = sess.run(text_cnn.epoch_step)
-
         optimizer = optim.Adam(model.parameters(), lr=0.001)
         iteration = 0
         best_acc = 0.50
@@ -187,40 +186,26 @@ class Main:
             predictions_all = []
             # train
             for batch in self.train_batch_manager.iter_batch(shuffle=False):
+                # optimizer.zero_grad()
                 iteration += 1
                 input_x, features_vector, input_y_dict = batch
                 input_y = input_y_dict[column_name]
                 input_y_all.extend(input_y)
-                # weights = get_weights_for_current_batch(input_y, self.label_weight_dict[column_name])   # 根据类别权重参数更新训练集各标签的权重
-                weights = [1.24, 25, 19.91, 0.32]
-                weights = np.asarray(weights)
-                weights = torch.Tensor(weights)
-                # print("weights:", weights.size())
+                weights = torch.Tensor(np.asarray(self.label_weight_dict[column_name]))  # 根据类别权重参数更新训练集各标签的权重
                 criterion = nn.CrossEntropyLoss(weight=weights)
-                input_x = torch.Tensor(input_x)
-                input_y = torch.Tensor(input_y)
-                input_y_onehot = np.zeros((config.batch_size, config.num_classes))
-                # print("input_y_onehot:", input_y_onehot.shape)
-                for index, y_value in enumerate(input_y):
-                    input_y_onehot[index][int(y_value)] = 1.0
+                input_x, input_y = torch.Tensor(input_x), torch.Tensor(input_y)
                 input_y = input_y.long()
-                input_y_onehot = torch.Tensor(input_y_onehot)
-                input_y_onehot = input_y_onehot.long()
-                input_x, input_y_onehot = Variable(input_x), Variable(input_y)
+                input_x, input_y = Variable(input_x), Variable(input_y)
                 outputs = model(input_x)
-                # print("outputs", outputs.size())
-                # print("input_y_onehot:", input_y_onehot, input_y_onehot.size())
-                curr_loss = criterion(outputs, input_y_onehot)
+                curr_loss = criterion(outputs, input_y)
                 _, predictions = torch.max(outputs.data, 1)
-                # print("predictions:", predictions)
-                curr_acc = ((predictions == input_y).sum()) / len(input_y)
+                curr_acc = ((predictions == input_y).sum().numpy()) / len(input_y)
                 predictions_all.extend(predictions)
                 loss, eval_acc, counter = loss+curr_loss, eval_acc+curr_acc, counter+1
                 if counter % 10 == 0:  # steps_check
                     print("Epoch %d\tBatch %d\tTrain Loss:%.3f\tAcc:%.3f" % (epoch, counter, loss/float(counter), eval_acc/float(counter)))
                 curr_loss.backward()
                 optimizer.step()
-            # sample_weights_list = sample_weights_list_new
             f_0, f_1, f_2, f_3 = get_f_scores_all(predictions_all, input_y_all, 0.00001)  # test_f_score_in_valid_data
             print("f_0, f_1, f_2, f_3:", f_0, f_1, f_2, f_3)
             print("f1_score:", (f_0 + f_1 + f_2 + f_3) / 4)

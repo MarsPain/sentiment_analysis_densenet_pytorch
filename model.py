@@ -70,14 +70,12 @@ class _DenseBlock(nn.Module):
         init_features = init_features.detach().numpy()
         init_features = init_features[:, :, :config.max_len, :]
         init_features = torch.Tensor(init_features)
-        # print("init_features:", init_features.size())
         features = [init_features]
         for name, layer in self.named_children():
             new_features = layer(*features)
             new_features = new_features.detach().numpy()
             new_features = new_features[:, :, :config.max_len, :]
             new_features = torch.Tensor(new_features)
-            # print("new_features:", new_features)
             features.append(new_features)
         return torch.cat(features, 1)
 
@@ -96,8 +94,8 @@ class DenseNet(nn.Module):
         small_inputs (bool) - set to True if images are 32x32. Otherwise assumes images are larger.
         efficient (bool) - set to True to use checkpointing. Much more memory efficient, but slower.
     """
-    def __init__(self, growth_rate=6, block_config=(4, 4), compression=0.5,
-                 num_init_features=12, bn_size=1, drop_rate=0,
+    def __init__(self, growth_rate=4, block_config=(3, 3), compression=0.5,
+                 num_init_features=4, bn_size=1, drop_rate=0,
                  num_classes=config.num_classes, small_inputs=True, efficient=False):
 
         super(DenseNet, self).__init__()
@@ -144,7 +142,7 @@ class DenseNet(nn.Module):
         # self.features.add_module('norm_final', nn.BatchNorm2d(num_features))
 
         # Linear layer
-        self.classifier = nn.Linear(num_features, num_classes)
+        self.classifier = nn.Linear(num_features, num_classes)   # 用于分类的全连接层，得到对每个类别标签的预测值
 
         # Initialization
         for name, param in self.named_parameters():
@@ -159,20 +157,10 @@ class DenseNet(nn.Module):
                 param.data.fill_(0)
 
     def forward(self, x):
-        x = self.embed(Variable(torch.LongTensor(x.numpy())))
-        x = torch.unsqueeze(x, 1)
-        # print("x:", x.size())
-        features = self.features(x)
+        x = self.embed(Variable(torch.LongTensor(x.numpy())))   # 将词向量嵌入样本序列中
+        x = torch.unsqueeze(x, 1)   # 添加代表通道的维度（与TensorFlow不同，pytorch的通道维度是在第1个维度，也就是在代表batch的第0维之后，而TensorFlow是用最后一维度来表示通道）
+        features = self.features(x)  # 用DenseNet的DenseBlock提取特征
         out = F.relu(features, inplace=True)
-        # print("out:", out.size())
-        # out = out.view(features.size(0), -1)
-        # out = F.avg_pool2d(out, kernel_size=self.avgpool_size).view(features.size(0), -1)
-        # out = out.view(features.size(0), -1)
-        # print(out.size())
-        # out = out.numpy()
-        # out = out.transpose([0, 2, 1, 3])
-        # out = torch.Tensor(out)
         out = F.max_pool2d(out, kernel_size=(out.size(2), 1)).view(out.size(0), -1)
-        # print("out:", out.size())
         out = self.classifier(out)
         return out
