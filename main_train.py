@@ -65,7 +65,7 @@ class Main:
         logger.info("start seg train data")
         if not os.path.isdir(config.pkl_dir):   # 创建存储临时字典数据的目录
             os.makedirs(config.pkl_dir)
-        string_train_valid = os.path.join(config.pkl_dir, "string_train_valid_2.pkl")
+        string_train_valid = os.path.join(config.pkl_dir, "string_train_valid.pkl")
         if os.path.exists(string_train_valid):  # 若word_label_path已存在
             with open(string_train_valid, 'rb') as f:
                 self.string_train, self.string_valid = pickle.load(f)
@@ -105,7 +105,7 @@ class Main:
 
     def get_data(self):
         logger.info("start get data")
-        train_valid_test = os.path.join(config.pkl_dir, "train_valid_test_2.pkl")
+        train_valid_test = os.path.join(config.pkl_dir, "train_valid_test.pkl")
         if os.path.exists(train_valid_test):    # 若train_valid_test已被处理和存储
             with open(train_valid_test, 'rb') as data_f:
                 train_data, valid_data, self.label_weight_dict = pickle.load(data_f)
@@ -173,7 +173,8 @@ class Main:
 
     def train(self, column_name):
         model = self.create_model(column_name)
-        # print("model:", model)
+        print("model:", model)
+        model.cuda()
         # curr_epoch = sess.run(text_cnn.epoch_step)
         optimizer = optim.Adam(model.parameters(), lr=0.001)
         iteration = 0
@@ -186,23 +187,23 @@ class Main:
             predictions_all = []
             # train
             for batch in self.train_batch_manager.iter_batch(shuffle=False):
-                # optimizer.zero_grad()
+                optimizer.zero_grad()
                 iteration += 1
                 input_x, features_vector, input_y_dict = batch
                 input_y = input_y_dict[column_name]
                 input_y_all.extend(input_y)
                 weights = torch.Tensor(np.asarray(self.label_weight_dict[column_name]))  # 根据类别权重参数更新训练集各标签的权重
-                criterion = nn.CrossEntropyLoss(weight=weights)
+                criterion = nn.CrossEntropyLoss(weight=weights.cuda())
                 input_x, input_y = torch.Tensor(input_x), torch.Tensor(input_y)
                 input_y = input_y.long()
-                input_x, input_y = Variable(input_x), Variable(input_y)
+                input_x, input_y = Variable(input_x.cuda()), Variable(input_y.cuda())
                 outputs = model(input_x)
                 curr_loss = criterion(outputs, input_y)
                 _, predictions = torch.max(outputs.data, 1)
-                curr_acc = ((predictions == input_y).sum().numpy()) / len(input_y)
-                predictions_all.extend(predictions)
-                loss, eval_acc, counter = loss+curr_loss, eval_acc+curr_acc, counter+1
-                if counter % 10 == 0:  # steps_check
+                curr_acc = ((predictions.cpu() == input_y.cpu()).sum().numpy()) / len(input_y.cpu())
+                predictions_all.extend(predictions.cpu())
+                loss, eval_acc, counter = loss+curr_loss.cpu(), eval_acc+curr_acc, counter+1
+                if counter % 100 == 0:  # steps_check
                     print("Epoch %d\tBatch %d\tTrain Loss:%.3f\tAcc:%.3f" % (epoch, counter, loss/float(counter), eval_acc/float(counter)))
                 curr_loss.backward()
                 optimizer.step()
