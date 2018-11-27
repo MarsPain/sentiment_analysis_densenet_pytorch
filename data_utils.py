@@ -411,7 +411,8 @@ def compute_confuse_matrix(logit, label, small_value):
     false_positive_3 = 0  # FP:if label is false('1,2,3'),but predict is ture('0')
     false_negative_3 = 0  # FN:if label is true('0'),but predict is false('1,2,3')
     for i in range(length):
-        predict = np.argmax(logit[i])
+        # predict = np.argmax(logit[i])
+        predict = logit[i]
         # 用于计算0的精确率和召回率
         if label[i] == 0 and predict == 0:
             true_positive_0 += 1

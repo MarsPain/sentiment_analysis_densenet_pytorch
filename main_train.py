@@ -213,24 +213,23 @@ class Main:
             print("f_0, f_1, f_2, f_3:", f_0, f_1, f_2, f_3)
             print("f1_score:", (f_0 + f_1 + f_2 + f_3) / 4)
             print("going to increment epoch counter....")
-            # sess.run(text_cnn.epoch_increment)
             # valid
-            # if epoch % config.validate_every == 0:
-            #     eval_loss, eval_accc, f1_scoree, f_0, f_1, f_2, f_3, weights_label = self.evaluate(sess, text_cnn, self.valid_batch_manager, iteration, column_name)
-            #     print("【Validation】Epoch %d\t f_0:%.3f\tf_1:%.3f\tf_2:%.3f\tf_3:%.3f" % (epoch, f_0, f_1, f_2, f_3))
-            #     print("【Validation】Epoch %d\t Loss:%.3f\tAcc %.3f\tF1 Score:%.3f" % (epoch, eval_loss, eval_accc, f1_scoree))
-            #     # save model to checkpoint
-            #     if f1_scoree > best_f1_score:
-            #         save_path = config.ckpt_dir + "/" + column_name + "/model.ckpt"
-            #         print("going to save model. eval_f1_score:", f1_scoree, ";previous best f1 score:", best_f1_score,
-            #               ";eval_acc", str(eval_accc), ";previous best_acc:", str(best_acc))
-            #         saver.save(sess, save_path)
-            #         best_acc = eval_accc
-            #         best_f1_score = f1_scoree
-            #     if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
-            #         for i in range(1):  # decay learning rate if necessary.
-            #             print(i, "Going to decay learning rate by half.")
-            #             sess.run(text_cnn.learning_rate_decay_half_op)
+            if epoch % config.validate_every == 0:
+                eval_loss, eval_accc, f1_scoree, f_0, f_1, f_2, f_3, weights_label = self.evaluate(model, self.valid_batch_manager, iteration, column_name)
+                print("【Validation】Epoch %d\t f_0:%.3f\tf_1:%.3f\tf_2:%.3f\tf_3:%.3f" % (epoch, f_0, f_1, f_2, f_3))
+                print("【Validation】Epoch %d\t Loss:%.3f\tAcc %.3f\tF1 Score:%.3f" % (epoch, eval_loss, eval_accc, f1_scoree))
+                # save model to checkpoint
+                if f1_scoree > best_f1_score:
+                    save_path = config.ckpt_dir + "/" + column_name + "/model.ckpt"
+                    print("going to save model. eval_f1_score:", f1_scoree, ";previous best f1 score:", best_f1_score,
+                          ";eval_acc", str(eval_accc), ";previous best_acc:", str(best_acc))
+                    torch.save(model, save_path)
+                    best_acc = eval_accc
+                    best_f1_score = f1_scoree
+                # if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
+                #     for i in range(1):  # decay learning rate if necessary.
+                #         print(i, "Going to decay learning rate by half.")
+                #         sess.run(text_cnn.learning_rate_decay_half_op)
 
     def create_model(self, column_name):
         model_save_dir = config.ckpt_dir + "/" + column_name
@@ -242,8 +241,8 @@ class Main:
             model = DenseNet()
             optimizer = optim.Adam(model.parameters(), lr=0.001)
             optimizer.zero_grad()
-            # if not os.path.exists(model_save_dir):
-            #     os.makedirs(model_save_dir)
+            if not os.path.exists(model_save_dir):
+                os.makedirs(model_save_dir)
             if config.use_pretrained_embedding:  # 加载预训练的词向量
                 print("===>>>going to use pretrained word embeddings...")
                 emb_matrix = np.zeros((len(self.index_to_word), config.embed_size))
@@ -252,7 +251,7 @@ class Main:
                 print("using pre-trained word emebedding.ended...")
         return model
 
-    def evaluate(self, sess, text_cnn, batch_manager, iteration, column_name):
+    def evaluate(self, model, batch_manager, iteration, column_name):
         small_value = 0.00001
         # file_object = open('data/log_predict_error.txt', 'a')
         eval_loss, eval_accc, eval_counter = 0.0, 0.0, 0
@@ -262,12 +261,17 @@ class Main:
         for batch in batch_manager.iter_batch(shuffle=True):
             eval_x, features_vector, eval_y_dict = batch
             eval_y = eval_y_dict[column_name]
-            weights = get_weights_for_current_batch(eval_y, self.label_weight_dict[column_name])   # 根据类别权重参数更新训练集各标签的权重
-            feed_dict = {text_cnn.input_x: eval_x, text_cnn.features_vector: features_vector, text_cnn.input_y: eval_y,
-                         text_cnn.weights: weights, text_cnn.dropout_keep_prob: 1.0, text_cnn.iter: iteration}
-            curr_eval_loss, curr_accc, logits = sess.run([text_cnn.loss_val, text_cnn.accuracy, text_cnn.logits], feed_dict)
+            weights = torch.Tensor(np.asarray(self.label_weight_dict[column_name]))  # 根据类别权重参数更新训练集各标签的权重
+            criterion = nn.CrossEntropyLoss(weight=weights.cuda())
+            eval_x, eval_y = torch.Tensor(eval_x), torch.Tensor(eval_y)
+            eval_y = eval_y.long()
+            eval_x, eval_y = Variable(eval_x.cuda()), Variable(eval_y.cuda())
+            outputs = model(eval_x)
+            curr_eval_loss = criterion(outputs, eval_y)
+            _, predictions = torch.max(outputs.data, 1)
+            curr_acc = ((predictions.cpu() == eval_y.cpu()).sum().numpy()) / len(eval_y.cpu())
             true_positive_0, false_positive_0, false_negative_0, true_positive_1, false_positive_1, false_negative_1,\
-            true_positive_2, false_positive_2, false_negative_2, true_positive_3, false_positive_3, false_negative_3 = compute_confuse_matrix(logits, eval_y, small_value)
+            true_positive_2, false_positive_2, false_negative_2, true_positive_3, false_positive_3, false_negative_3 = compute_confuse_matrix(predictions.cpu(), eval_y.cpu(), small_value)
             true_positive_0_all += true_positive_0
             false_positive_0_all += false_positive_0
             false_negative_0_all += false_negative_0
@@ -281,7 +285,7 @@ class Main:
             false_positive_3_all += false_positive_3
             false_negative_3_all += false_negative_3
             # write_predict_error_to_file(file_object, logits, eval_y, self.index_to_word, eval_x1, eval_x2)    # 获取被错误分类的样本（后期再处理）
-            eval_loss, eval_accc, eval_counter = eval_loss+curr_eval_loss, eval_accc+curr_accc, eval_counter+1
+            eval_loss, eval_accc, eval_counter = eval_loss+curr_eval_loss.cpu(), eval_accc+curr_acc, eval_counter+1
         # print("标签0的预测情况：", true_positive_0, false_positive_0, false_negative_0)
         p_0 = float(true_positive_0_all)/float(true_positive_0_all+false_positive_0_all+small_value)
         r_0 = float(true_positive_0_all)/float(true_positive_0_all+false_negative_0_all+small_value)

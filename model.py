@@ -95,8 +95,8 @@ class DenseNet(nn.Module):
         small_inputs (bool) - set to True if images are 32x32. Otherwise assumes images are larger.
         efficient (bool) - set to True to use checkpointing. Much more memory efficient, but slower.
     """
-    def __init__(self, growth_rate=8, block_config=(8, 1, 1), compression=0.5,
-                 num_init_features=8, bn_size=4, drop_rate=0,
+    def __init__(self, growth_rate=16, block_config=(4, 1, 1), compression=0.5,
+                 num_init_features=16, bn_size=4, drop_rate=0,
                  num_classes=config.num_classes, small_inputs=True, efficient=False):
 
         super(DenseNet, self).__init__()
