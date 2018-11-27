@@ -178,17 +178,19 @@ class Main:
         print("model:", model)
         model.cuda()
         # curr_epoch = sess.run(text_cnn.epoch_step)
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
+        learning_rate = 0.001
         iteration = 0
         best_acc = 0.50
         best_f1_score = 0.20
         batch_num = self.train_batch_manager.len_data
         for epoch in range(config.num_epochs):
+            print("learning_rate:", learning_rate)
             loss, eval_acc, counter = 0.0, 0.0, 0
             input_y_all = []
             predictions_all = []
             # train
             for batch in self.train_batch_manager.iter_batch(shuffle=False):
+                optimizer = optim.Adam(model.parameters(), lr=learning_rate)
                 optimizer.zero_grad()
                 iteration += 1
                 input_x, features_vector, input_y_dict = batch
@@ -226,10 +228,10 @@ class Main:
                     torch.save(model, save_path)
                     best_acc = eval_accc
                     best_f1_score = f1_scoree
-                # if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
-                #     for i in range(1):  # decay learning rate if necessary.
-                #         print(i, "Going to decay learning rate by half.")
-                #         sess.run(text_cnn.learning_rate_decay_half_op)
+                if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
+                    for i in range(1):  # decay learning rate if necessary.
+                        print(i, "Going to decay learning rate by half.")
+                        learning_rate = learning_rate / 2
 
     def create_model(self, column_name):
         model_save_dir = config.ckpt_dir + "/" + column_name
