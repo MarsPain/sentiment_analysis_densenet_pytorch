@@ -5,18 +5,18 @@ import csv
 import json
 from collections import OrderedDict
 import pickle
-import config
+from densenet_baseline import config
 import logging
 from sklearn.feature_extraction.text import TfidfVectorizer
 import os
 import argparse
-from data_utils import seg_words, create_dict, shuffle_padding, sentence_word_to_index,\
+from densenet_baseline.data_utils import seg_words, create_dict, shuffle_padding, sentence_word_to_index,\
     get_vector_tfidf, BatchManager, get_max_len, get_weights_for_current_batch, compute_confuse_matrix,\
     get_labal_weight, get_weights_for_current_batch_and_sample, get_sample_weights, get_f_scores_all,\
     get_vector_tfidf_from_dict
-from utils import load_data_from_csv, get_tfidf_and_save, load_tfidf_dict,\
+from densenet_baseline.utils import load_data_from_csv, get_tfidf_and_save, load_tfidf_dict,\
     load_word_embedding, get_tfidf_dict_and_save, get_idf_dict_and_save
-from model import DenseNet
+from densenet_baseline.model import DenseNet
 import torch
 import torch.nn as nn
 import torch.optim as optim

@@ -2,8 +2,8 @@ import os
 
 
 ckpt_dir = "ckpt"
-train_data_path = "data/sentiment_analysis_trainingset.csv"
-dev_data_path = "data/sentiment_analysis_validationset.csv"
+train_data_path = "../data/sentiment_analysis_trainingset.csv"
+dev_data_path = "../data/sentiment_analysis_validationset.csv"
 pkl_dir = "pkl"
 tfidf_dict_path = "data/tfidf.txt"
 use_pretrained_embedding = True

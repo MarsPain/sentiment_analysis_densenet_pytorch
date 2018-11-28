@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as cp
 from collections import OrderedDict
-import config
+from densenet_baseline import config
 from torch.autograd import Variable
 
 
