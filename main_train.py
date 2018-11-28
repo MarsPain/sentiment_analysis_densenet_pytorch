@@ -60,8 +60,8 @@ class Main:
         logger.info("start load data")
         self.train_data_df = load_data_from_csv(config.train_data_path)
         self.validate_data_df = load_data_from_csv(config.dev_data_path)
-        content_train = self.train_data_df.iloc[:10000, 1]
-        content_valid = self.validate_data_df.iloc[:1000, 1]
+        content_train = self.train_data_df.iloc[:, 1]
+        content_valid = self.validate_data_df.iloc[:, 1]
         logger.info("start seg train data")
         if not os.path.isdir(config.pkl_dir):   # 创建存储临时字典数据的目录
             os.makedirs(config.pkl_dir)
@@ -82,11 +82,11 @@ class Main:
         logger.info("load label data")
         self.label_train_dict = {}
         for column in self.columns[2:]:
-            label_train = list(self.train_data_df[column].iloc[:10000])
+            label_train = list(self.train_data_df[column].iloc[:])
             self.label_train_dict[column] = label_train
         self.label_valid_dict = {}
         for column in self.columns[2:]:
-            label_valid = list(self.validate_data_df[column].iloc[:1000])
+            label_valid = list(self.validate_data_df[column].iloc[:])
             self.label_valid_dict[column] = label_valid
         # print(self.label_list["location_traffic_convenience"][0], type(self.label_list["location_traffic_convenience"][0]))
 

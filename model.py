@@ -140,7 +140,7 @@ class DenseNet(nn.Module):
             #     num_features = int(num_features * compression)
 
         # Final batch norm
-        # self.features.add_module('norm_final', nn.BatchNorm2d(num_features))
+        self.features.add_module('norm_final', nn.BatchNorm2d(num_features))
 
         # Linear layer
         self.classifier = nn.Linear(num_features, num_classes)   # 用于分类的全连接层，得到对每个类别标签的预测值
