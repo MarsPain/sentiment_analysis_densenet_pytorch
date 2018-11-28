@@ -166,6 +166,15 @@ class DenseNet(nn.Module):
         s_matrix = torch.cat(layer_s_list, 1)
         return s_matrix  # 返回每层中所有卷积核对每个字符提取的gram特征：[batch_size, num_layers, max_len]
 
+    def scale_reweight(self, s_matrix):
+        feature_attention = None
+        s_matrix = torch.transpose(s_matrix, 1, 2)
+        # print("s_matrix:", s_matrix, s_matrix.size())
+        softmax = nn.Softmax(dim=2)  # 设置为在第2个维度上进行softmax
+        s_matrix = softmax(s_matrix)
+        # print("s_matrix:", s_matrix, s_matrix.size())
+        return feature_attention
+
     def forward(self, x):
         x = self.embed(Variable(torch.LongTensor(x.cpu().numpy()).cuda()))   # 将词向量嵌入样本序列中
         x = torch.unsqueeze(x, 1)   # 添加代表通道的维度（与TensorFlow不同，pytorch的通道维度是在第1个维度，也就是在代表batch的第0维之后，而TensorFlow是用最后一维度来表示通道）
@@ -173,6 +182,7 @@ class DenseNet(nn.Module):
         out = F.relu(features, inplace=True)
         # print("out:", out.size())
         s_matrix = self.filter_ensemble(out)
+        feature_attention = self.scale_reweight(s_matrix)
         out = F.max_pool2d(out, kernel_size=(out.size(2), 1)).view(out.size(0), -1)
         out = self.classifier(out)
         return out
