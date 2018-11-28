@@ -154,12 +154,24 @@ class DenseNet(nn.Module):
             elif 'classifier' in name and 'bias' in name:
                 param.data.fill_(0)
 
+    def get_s(self, out):
+        out = out.squeeze()  # 去除最后一个维度为1的维度
+        out = torch.transpose(out, 1, 2)
+        # print("out:", out.size())
+        layer_out_tuple = torch.chunk(out, config.num_dense_layer+1, dim=2)
+        layer_s_list = []
+        for layer_out in layer_out_tuple:
+            layer_s_list.append(torch.unsqueeze(torch.sum(layer_out, 2), 1))    # sum对所有卷积核对每个字符提取到的特征值进行求和，然后用unsqueeze添加一个表示层的维度通道
+        s_matrix = torch.cat(layer_s_list, 1)
+        return s_matrix  # 返回每层中所有卷积核对每个字符提取的gram特征：[batch_size, num_layers, max_len]
+
     def forward(self, x):
         x = self.embed(Variable(torch.LongTensor(x.cpu().numpy()).cuda()))   # 将词向量嵌入样本序列中
         x = torch.unsqueeze(x, 1)   # 添加代表通道的维度（与TensorFlow不同，pytorch的通道维度是在第1个维度，也就是在代表batch的第0维之后，而TensorFlow是用最后一维度来表示通道）
         features = self.features(x)  # 用DenseNet的DenseBlock提取特征
         out = F.relu(features, inplace=True)
         # print("out:", out.size())
+        s_matrix = self.get_s(out)
         out = F.max_pool2d(out, kernel_size=(out.size(2), 1)).view(out.size(0), -1)
         out = self.classifier(out)
         return out
