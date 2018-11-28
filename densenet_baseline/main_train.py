@@ -166,9 +166,6 @@ class Main:
         column_name_list = self.columns
         column_name = column_name_list[config.column_index]   # 选择评价对象
         logger.info("start %s model train" % column_name)
-        # tf_config = tf.ConfigProto()
-        # tf_config.gpu_options.allow_growth = True
-        # with tf.Session(config=tf_config) as sess:
         self.train(column_name)
         logger.info("complete %s model train" % column_name)
         logger.info("complete all models' train")
@@ -177,12 +174,10 @@ class Main:
         model = self.create_model(column_name)
         print("model:", model)
         model.cuda()
-        # curr_epoch = sess.run(text_cnn.epoch_step)
         learning_rate = 0.001
         iteration = 0
         best_acc = 0.50
         best_f1_score = 0.20
-        batch_num = self.train_batch_manager.len_data
         for epoch in range(config.num_epochs):
             print("learning_rate:", learning_rate)
             loss, eval_acc, counter = 0.0, 0.0, 0
@@ -217,16 +212,26 @@ class Main:
             print("going to increment epoch counter....")
             # valid
             if epoch % config.validate_every == 0:
-                eval_loss, eval_accc, f1_scoree, f_0, f_1, f_2, f_3, weights_label = self.evaluate(model, self.valid_batch_manager, iteration, column_name)
+                eval_y_all = []
+                eval_predictions_all = []
+                for batch in self.valid_batch_manager.iter_batch(shuffle=True):
+                    eval_x, features_vector, eval_y_dict = batch
+                    eval_y = eval_y_dict[column_name]
+                    eval_y_all.extend(eval_y)
+                    eval_x, eval_y = torch.Tensor(eval_x), torch.Tensor(eval_y)
+                    eval_y = eval_y.long()
+                    eval_x, eval_y = Variable(eval_x.cuda()), Variable(eval_y.cuda())
+                    outputs = model(eval_x)
+                    _, predictions = torch.max(outputs.data, 1)
+                    eval_predictions_all.extend(predictions.cpu())
+                f1_scoree, f_0, f_1, f_2, f_3, weights_label = self.evaluate(np.asarray(eval_y_all), np.asarray(eval_predictions_all))
                 print("【Validation】Epoch %d\t f_0:%.3f\tf_1:%.3f\tf_2:%.3f\tf_3:%.3f" % (epoch, f_0, f_1, f_2, f_3))
-                print("【Validation】Epoch %d\t Loss:%.3f\tAcc %.3f\tF1 Score:%.3f" % (epoch, eval_loss, eval_accc, f1_scoree))
+                print("【Validation】Epoch %d\t F1 Score:%.3f" % (epoch, f1_scoree))
                 # save model to checkpoint
                 if f1_scoree > best_f1_score:
                     save_path = config.ckpt_dir + "/" + column_name + "/model.ckpt"
-                    print("going to save model. eval_f1_score:", f1_scoree, ";previous best f1 score:", best_f1_score,
-                          ";eval_acc", str(eval_accc), ";previous best_acc:", str(best_acc))
-                    torch.save(model, save_path)
-                    best_acc = eval_accc
+                    print("going to save model. eval_f1_score:", f1_scoree, ";previous best f1 score:", best_f1_score, ";previous best_acc:", str(best_acc))
+                    # torch.save(model, save_path)
                     best_f1_score = f1_scoree
                 if config.decay_lr_flag and (epoch != 0 and (epoch == 5 or epoch == 10 or epoch == 15 or epoch == 20)):
                     for i in range(1):  # decay learning rate if necessary.
@@ -243,8 +248,8 @@ class Main:
             model = DenseNet()
             optimizer = optim.Adam(model.parameters(), lr=0.001)
             optimizer.zero_grad()
-            if not os.path.exists(model_save_dir):
-                os.makedirs(model_save_dir)
+            # if not os.path.exists(model_save_dir):
+            #     os.makedirs(model_save_dir)
             if config.use_pretrained_embedding:  # 加载预训练的词向量
                 print("===>>>going to use pretrained word embeddings...")
                 emb_matrix = np.zeros((len(self.index_to_word), config.embed_size))
@@ -253,41 +258,26 @@ class Main:
                 print("using pre-trained word emebedding.ended...")
         return model
 
-    def evaluate(self, model, batch_manager, iteration, column_name):
+    def evaluate(self, eval_y_all, eval_predictions_all):
         small_value = 0.00001
-        # file_object = open('data/log_predict_error.txt', 'a')
-        eval_loss, eval_accc, eval_counter = 0.0, 0.0, 0
         true_positive_0_all, false_positive_0_all, false_negative_0_all, true_positive_1_all, false_positive_1_all, false_negative_1_all,\
         true_positive_2_all, false_positive_2_all, false_negative_2_all, true_positive_3_all, false_positive_3_all, false_negative_3_all = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         weights_label = {}  # weight_label[label_index]=(number,correct)
-        for batch in batch_manager.iter_batch(shuffle=True):
-            eval_x, features_vector, eval_y_dict = batch
-            eval_y = eval_y_dict[column_name]
-            weights = torch.Tensor(np.asarray(self.label_weight_dict[column_name]))  # 根据类别权重参数更新训练集各标签的权重
-            criterion = nn.CrossEntropyLoss(weight=weights.cuda())
-            eval_x, eval_y = torch.Tensor(eval_x), torch.Tensor(eval_y)
-            eval_y = eval_y.long()
-            eval_x, eval_y = Variable(eval_x.cuda()), Variable(eval_y.cuda())
-            outputs = model(eval_x)
-            curr_eval_loss = criterion(outputs, eval_y)
-            _, predictions = torch.max(outputs.data, 1)
-            curr_acc = ((predictions.cpu() == eval_y.cpu()).sum().numpy()) / len(eval_y.cpu())
-            true_positive_0, false_positive_0, false_negative_0, true_positive_1, false_positive_1, false_negative_1,\
-            true_positive_2, false_positive_2, false_negative_2, true_positive_3, false_positive_3, false_negative_3 = compute_confuse_matrix(predictions.cpu(), eval_y.cpu(), small_value)
-            true_positive_0_all += true_positive_0
-            false_positive_0_all += false_positive_0
-            false_negative_0_all += false_negative_0
-            true_positive_1_all += true_positive_1
-            false_positive_1_all += false_positive_1
-            false_negative_1_all += false_negative_1
-            true_positive_2_all += true_positive_2
-            false_positive_2_all += false_positive_2
-            false_negative_2_all += false_negative_2
-            true_positive_3_all += true_positive_3
-            false_positive_3_all += false_positive_3
-            false_negative_3_all += false_negative_3
-            # write_predict_error_to_file(file_object, logits, eval_y, self.index_to_word, eval_x1, eval_x2)    # 获取被错误分类的样本（后期再处理）
-            eval_loss, eval_accc, eval_counter = eval_loss+curr_eval_loss.cpu(), eval_accc+curr_acc, eval_counter+1
+        true_positive_0, false_positive_0, false_negative_0, true_positive_1, false_positive_1, false_negative_1,\
+        true_positive_2, false_positive_2, false_negative_2, true_positive_3, false_positive_3, false_negative_3 = compute_confuse_matrix(eval_predictions_all, eval_y_all, small_value)
+        true_positive_0_all += true_positive_0
+        false_positive_0_all += false_positive_0
+        false_negative_0_all += false_negative_0
+        true_positive_1_all += true_positive_1
+        false_positive_1_all += false_positive_1
+        false_negative_1_all += false_negative_1
+        true_positive_2_all += true_positive_2
+        false_positive_2_all += false_positive_2
+        false_negative_2_all += false_negative_2
+        true_positive_3_all += true_positive_3
+        false_positive_3_all += false_positive_3
+        false_negative_3_all += false_negative_3
+        # write_predict_error_to_file(file_object, logits, eval_y, self.index_to_word, eval_x1, eval_x2)    # 获取被错误分类的样本（后期再处理）
         # print("标签0的预测情况：", true_positive_0, false_positive_0, false_negative_0)
         p_0 = float(true_positive_0_all)/float(true_positive_0_all+false_positive_0_all+small_value)
         r_0 = float(true_positive_0_all)/float(true_positive_0_all+false_negative_0_all+small_value)
@@ -305,7 +295,7 @@ class Main:
         r_3 = float(true_positive_3_all)/float(true_positive_3_all+false_negative_3_all+small_value)
         f_3 = 2 * p_3 * r_3 / (p_3 + r_3 + small_value)
         f1_score = (f_0 + f_1 + f_2 + f_3) / 4
-        return eval_loss/float(eval_counter), eval_accc/float(eval_counter), f1_score, f_0, f_1, f_2, f_3, weights_label
+        return f1_score, f_0, f_1, f_2, f_3, weights_label
 
 if __name__ == "__main__":
     main = Main()

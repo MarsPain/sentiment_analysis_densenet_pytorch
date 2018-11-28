@@ -68,9 +68,6 @@ class _DenseBlock(nn.Module):
             self.add_module('denselayer%d' % (i + 1), layer)
 
     def forward(self, init_features):
-        init_features = init_features.detach().cpu().numpy()
-        init_features = init_features[:, :, :config.max_len, :]
-        init_features = torch.Tensor(init_features)
         features = [init_features.cuda()]
         for name, layer in self.named_children():
             new_features = layer(*features)
@@ -108,7 +105,7 @@ class DenseNet(nn.Module):
         # First convolution
         if small_inputs:
             self.features = nn.Sequential(OrderedDict([
-                ('conv0', nn.Conv2d(1, num_init_features, kernel_size=(2, config.embed_size), stride=1, padding=(1, 0), bias=False)),
+                ('conv0', nn.Conv2d(1, num_init_features, kernel_size=(1, config.embed_size), stride=1, padding=(0, 0), bias=False)),
             ]))
             print("self.features:", self.features)
         else:
