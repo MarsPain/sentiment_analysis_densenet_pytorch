@@ -23,7 +23,6 @@ import torch.optim as optim
 from torch.autograd import Variable
 
 
-filter_sizes = config.filter_sizes
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] <%(processName)s> (%(threadName)s) %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -65,8 +64,8 @@ class Main:
         logger.info("start seg train data")
         if not os.path.isdir(config.pkl_dir):   # 创建存储临时字典数据的目录
             os.makedirs(config.pkl_dir)
-        # string_train_valid = os.path.join(config.pkl_dir, "string_train_valid.pkl")
-        string_train_valid = os.path.join(config.pkl_dir, "string_train_valid_2.pkl")
+        string_train_valid = os.path.join(config.pkl_dir, "string_train_valid.pkl")
+        # string_train_valid = os.path.join(config.pkl_dir, "string_train_valid_2.pkl")
         if os.path.exists(string_train_valid):  # 若word_label_path已存在
             with open(string_train_valid, 'rb') as f:
                 self.string_train, self.string_valid = pickle.load(f)
@@ -106,8 +105,8 @@ class Main:
 
     def get_data(self):
         logger.info("start get data")
-        # train_valid_test = os.path.join(config.pkl_dir, "train_valid_test.pkl")
-        train_valid_test = os.path.join(config.pkl_dir, "train_valid_test_2.pkl")
+        train_valid_test = os.path.join(config.pkl_dir, "train_valid_test.pkl")
+        # train_valid_test = os.path.join(config.pkl_dir, "train_valid_test_2.pkl")
         if os.path.exists(train_valid_test):    # 若train_valid_test已被处理和存储
             with open(train_valid_test, 'rb') as data_f:
                 train_data, valid_data, self.label_weight_dict = pickle.load(data_f)
@@ -201,7 +200,7 @@ class Main:
                 curr_acc = ((predictions.cpu() == input_y.cpu()).sum().numpy()) / len(input_y.cpu())
                 predictions_all.extend(predictions.cpu())
                 loss, eval_acc, counter = loss+curr_loss.cpu(), eval_acc+curr_acc, counter+1
-                if counter % 10 == 0:  # steps_check
+                if counter % 100 == 0:  # steps_check
                     print("Epoch %d\tBatch %d\tTrain Loss:%.3f\tAcc:%.3f" % (epoch, counter, loss/float(counter), eval_acc/float(counter)))
                 curr_loss.backward()
                 optimizer.step()
