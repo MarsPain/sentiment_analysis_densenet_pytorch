@@ -92,8 +92,8 @@ class DenseNet(nn.Module):
         small_inputs (bool) - set to True if images are 32x32. Otherwise assumes images are larger.
         efficient (bool) - set to True to use checkpointing. Much more memory efficient, but slower.
     """
-    def __init__(self, growth_rate=16, block_config=(4, 1, 1), compression=0.5,
-                 num_init_features=16, bn_size=4, drop_rate=0,
+    def __init__(self, growth_rate=config.num_filters, block_config=(config.num_dense_layer, 1, 1), compression=0.5,
+                 num_init_features=config.num_filters, bn_size=4, drop_rate=config.dropout_rate,
                  num_classes=config.num_classes, small_inputs=True, efficient=False):
 
         super(DenseNet, self).__init__()
@@ -159,6 +159,7 @@ class DenseNet(nn.Module):
         x = torch.unsqueeze(x, 1)   # 添加代表通道的维度（与TensorFlow不同，pytorch的通道维度是在第1个维度，也就是在代表batch的第0维之后，而TensorFlow是用最后一维度来表示通道）
         features = self.features(x)  # 用DenseNet的DenseBlock提取特征
         out = F.relu(features, inplace=True)
+        # print("out:", out.size())
         out = F.max_pool2d(out, kernel_size=(out.size(2), 1)).view(out.size(0), -1)
         out = self.classifier(out)
         return out
