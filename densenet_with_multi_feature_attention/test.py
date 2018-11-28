@@ -16,3 +16,10 @@ import numpy as np
 # 测试元组的切片
 # t = tuple((1, 2, 3))
 # print(t[:1])
+
+# 测试numpy中常量与向量相乘
+# a = 3
+# b = np.asarray([1, 2, 3])
+# print(a*b, (a*b).shape)
+
+# print(np.zeros((3,)))

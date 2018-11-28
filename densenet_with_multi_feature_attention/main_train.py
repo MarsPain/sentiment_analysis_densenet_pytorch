@@ -201,7 +201,7 @@ class Main:
                 curr_acc = ((predictions.cpu() == input_y.cpu()).sum().numpy()) / len(input_y.cpu())
                 predictions_all.extend(predictions.cpu())
                 loss, eval_acc, counter = loss+curr_loss.cpu(), eval_acc+curr_acc, counter+1
-                if counter % 100 == 0:  # steps_check
+                if counter % 10 == 0:  # steps_check
                     print("Epoch %d\tBatch %d\tTrain Loss:%.3f\tAcc:%.3f" % (epoch, counter, loss/float(counter), eval_acc/float(counter)))
                 curr_loss.backward()
                 optimizer.step()

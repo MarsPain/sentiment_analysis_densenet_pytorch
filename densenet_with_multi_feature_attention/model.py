@@ -6,6 +6,7 @@ import torch.utils.checkpoint as cp
 from collections import OrderedDict
 from densenet_with_multi_feature_attention import config
 from torch.autograd import Variable
+import numpy as np
 
 
 def _bn_function_factory(norm, relu, conv):
@@ -140,7 +141,7 @@ class DenseNet(nn.Module):
         self.features.add_module('norm_final', nn.BatchNorm2d(num_features))
 
         # Linear layer
-        self.classifier = nn.Linear(num_features, num_classes)   # 用于分类的全连接层，得到对每个类别标签的预测值
+        self.classifier = nn.Linear(config.num_filters, num_classes)   # 用于分类的全连接层，得到对每个类别标签的预测值
 
         # Initialization
         for name, param in self.named_parameters():
@@ -166,10 +167,10 @@ class DenseNet(nn.Module):
         s_matrix = torch.cat(layer_s_list, 1)
         return s_matrix  # 返回s值矩阵，即每层中所有卷积核对每个字符提取的n-gram特征和：[batch_size, num_layers, max_len]
 
-    def scale_reweight(self, s_matrix):
+    def scale_reweight(self, s_matrix, out):
         feature_attention = None
         s_matrix = torch.transpose(s_matrix, 1, 2)
-        s_matrix = torch.unsqueeze(s_matrix, 1)
+        # s_matrix = torch.unsqueeze(s_matrix, 1)
         # print("s_matrix:", s_matrix.size())
         # mlp_classifier = nn.Linear(1, 1)
         # s_matrix = mlp_classifier(s_matrix)
@@ -177,6 +178,23 @@ class DenseNet(nn.Module):
         # print("s_matrix:", s_matrix.size())
         softmax = nn.Softmax(dim=2)  # 设置为在第2个维度上进行softmax，以对每个字符的不同层的特征值进行softmax，以得到不同层的不同n-gram特征对该字符的不同权重
         a_weights_matrix = softmax(s_matrix)    # 获取注意力权重矩阵
+        a_weights_matrix = a_weights_matrix.cpu().detach().numpy()
+        # print("a_weights_matrix:", a_weights_matrix.size())
+        out = out.squeeze()  # 去除最后一个维度为1的维度
+        out = torch.transpose(out, 1, 2)
+        layer_out_tuple = torch.chunk(out, config.num_dense_layer+1, dim=2)
+        feature_attention = np.zeros((out.size(0), out.size(1), config.num_filters))
+        # print("layer_out_tuple:", layer_out_tuple[0].size())
+        for i in range(out.size(0)):
+            for j in range(out.size(1)):
+                word_feature_attention = np.zeros((config.num_filters, ))
+                for l in range(config.num_dense_layer+1):
+                    word_feature_attention += a_weights_matrix[i][j][l] * layer_out_tuple[l].cpu().detach().numpy()[i][j]
+                feature_attention[i][j] = word_feature_attention
+                # print("YES!!!!!")
+        feature_attention = torch.Tensor(feature_attention).cuda()
+        feature_attention = torch.transpose(feature_attention, 1, 2)
+        feature_attention = torch.unsqueeze(feature_attention, 3)
         return feature_attention
 
     def forward(self, x):
@@ -186,7 +204,7 @@ class DenseNet(nn.Module):
         out = F.relu(features, inplace=True)
         # print("out:", out.size())
         s_matrix = self.filter_ensemble(out)
-        feature_attention = self.scale_reweight(s_matrix)
-        out = F.max_pool2d(out, kernel_size=(out.size(2), 1)).view(out.size(0), -1)
+        feature_attention = self.scale_reweight(s_matrix, out)
+        out = F.max_pool2d(feature_attention, kernel_size=(feature_attention.size(2), 1)).view(feature_attention.size(0), -1)
         out = self.classifier(out)
         return out
