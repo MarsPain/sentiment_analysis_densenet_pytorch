@@ -164,15 +164,19 @@ class DenseNet(nn.Module):
         for layer_out in layer_out_tuple:
             layer_s_list.append(torch.unsqueeze(torch.sum(layer_out, 2), 1))    # sum对所有卷积核对每个字符提取到的特征值进行求和，然后用unsqueeze添加一个表示层的维度通道
         s_matrix = torch.cat(layer_s_list, 1)
-        return s_matrix  # 返回每层中所有卷积核对每个字符提取的gram特征：[batch_size, num_layers, max_len]
+        return s_matrix  # 返回s值矩阵，即每层中所有卷积核对每个字符提取的n-gram特征和：[batch_size, num_layers, max_len]
 
     def scale_reweight(self, s_matrix):
         feature_attention = None
         s_matrix = torch.transpose(s_matrix, 1, 2)
-        # print("s_matrix:", s_matrix, s_matrix.size())
-        softmax = nn.Softmax(dim=2)  # 设置为在第2个维度上进行softmax
-        s_matrix = softmax(s_matrix)
-        # print("s_matrix:", s_matrix, s_matrix.size())
+        s_matrix = torch.unsqueeze(s_matrix, 1)
+        # print("s_matrix:", s_matrix.size())
+        # mlp_classifier = nn.Linear(1, 1)
+        # s_matrix = mlp_classifier(s_matrix)
+        # s_matrix = s_matrix.squeeze()
+        # print("s_matrix:", s_matrix.size())
+        softmax = nn.Softmax(dim=2)  # 设置为在第2个维度上进行softmax，以对每个字符的不同层的特征值进行softmax，以得到不同层的不同n-gram特征对该字符的不同权重
+        a_weights_matrix = softmax(s_matrix)    # 获取注意力权重矩阵
         return feature_attention
 
     def forward(self, x):
