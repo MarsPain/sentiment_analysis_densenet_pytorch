@@ -154,7 +154,8 @@ class DenseNet(nn.Module):
             elif 'classifier' in name and 'bias' in name:
                 param.data.fill_(0)
 
-    def get_s(self, out):
+    @staticmethod
+    def filter_ensemble(out):
         out = out.squeeze()  # 去除最后一个维度为1的维度
         out = torch.transpose(out, 1, 2)
         # print("out:", out.size())
@@ -171,7 +172,7 @@ class DenseNet(nn.Module):
         features = self.features(x)  # 用DenseNet的DenseBlock提取特征
         out = F.relu(features, inplace=True)
         # print("out:", out.size())
-        s_matrix = self.get_s(out)
+        s_matrix = self.filter_ensemble(out)
         out = F.max_pool2d(out, kernel_size=(out.size(2), 1)).view(out.size(0), -1)
         out = self.classifier(out)
         return out
